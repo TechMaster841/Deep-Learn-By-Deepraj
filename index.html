@@ -1,0 +1,2405 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DeepLearn — Speak English Aloud & Detect Every Mistake Instantly</title>
+  <meta name="description" content="Practice English speaking fluency with DeepLearn. Click Let's Learn to get a curated paragraph, press the mic button, read aloud, and see exact word-by-word mistake tracking in real time." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS v4 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+  <style>
+    :root {
+      --bg-canvas: #FAF9F6;
+      --bg-surface: #FFFFFF;
+      --ink-primary: #0F172A;
+      --ink-secondary: #475569;
+      --accent-indigo: #4338CA;
+      --accent-indigo-bright: #4F46E5;
+      --accent-emerald: #10B981;
+      --accent-coral: #F43F5E;
+      --accent-amber: #F59E0B;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-canvas);
+      color: var(--ink-primary);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* FIX: these two elements carry both `hidden` and `flex` utilities.
+       Guarantee that `hidden` always wins so the modal / mic alert can never
+       sit invisibly on top of the page (or show up when they shouldn't). */
+    #info-modal.hidden,
+    #mic-alert-banner.hidden {
+      display: none !important;
+    }
+
+    .font-serif-editorial {
+      font-family: 'Instrument Serif', Georgia, serif;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Subtle architectural dot grid */
+    .bg-dot-grid {
+      background-image: radial-gradient(rgba(15, 23, 42, 0.08) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    /* Ambient Hero Aura */
+    @keyframes floatSlow {
+      0%, 100% { transform: translate(0px, 0px) scale(1); }
+      50% { transform: translate(18px, -14px) scale(1.04); }
+    }
+    @keyframes floatReverse {
+      0%, 100% { transform: translate(0px, 0px) scale(1); }
+      50% { transform: translate(-20px, 16px) scale(0.97); }
+    }
+
+    .animate-blob-slow {
+      animation: floatSlow 14s ease-in-out infinite;
+    }
+    .animate-blob-reverse {
+      animation: floatReverse 18s ease-in-out infinite;
+    }
+
+    /* Button shimmer sweep */
+    .btn-sheen {
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-sheen::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -120%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+      transform: skewX(-20deg);
+      transition: left 0.7s ease;
+    }
+    .btn-sheen:hover::after {
+      left: 140%;
+    }
+
+    /* Mic Pulse Rings */
+    @keyframes micPulseRing {
+      0% {
+        transform: scale(0.95);
+        opacity: 0.75;
+      }
+      70% {
+        transform: scale(1.45);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(1.5);
+        opacity: 0;
+      }
+    }
+    .mic-pulse-ring {
+      animation: micPulseRing 1.7s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+    }
+    .mic-pulse-ring-delay {
+      animation: micPulseRing 1.7s cubic-bezier(0.24, 0, 0.38, 1) 0.6s infinite;
+    }
+
+    /* Sound Wave Bars */
+    @keyframes eqIdle {
+      0%, 100% { transform: scaleY(0.25); }
+      50% { transform: scaleY(0.5); }
+    }
+    .wave-bar {
+      transform-origin: center;
+      transition: transform 110ms ease, background-color 200ms ease;
+    }
+
+    /* Scroll Reveal Animations */
+    .reveal-on-scroll {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .reveal-on-scroll.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Word Token Pop Animation */
+    @keyframes wordAppear {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .word-appear {
+      animation: wordAppear 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      opacity: 0;
+    }
+
+    /* Interactive word states */
+    .word-token {
+      display: inline-flex;
+      align-items: center;
+      position: relative;
+      padding: 2px 6px;
+      margin: 2px 1.5px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      border: 1px solid transparent;
+    }
+    .word-token:hover {
+      background-color: rgba(79, 70, 229, 0.08);
+      border-color: rgba(79, 70, 229, 0.2);
+    }
+    .word-token.state-correct {
+      background-color: #ECFDF5;
+      color: #065F46;
+      border-color: #A7F3D0;
+    }
+    .word-token.state-wrong {
+      background-color: #FFF1F2;
+      color: #BE123C;
+      border-color: #FECDD3;
+      text-decoration: underline wavy #F43F5E 1.5px;
+      text-underline-offset: 4px;
+    }
+    .word-token.state-missed {
+      background-color: #FFFBEB;
+      color: #B45309;
+      border: 1px dashed #FCD34D;
+    }
+    .word-token.state-active {
+      background-color: #EEF2FF;
+      color: #3730A3;
+      border-color: #818CF8;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+    }
+
+    /* Custom Scrollbar for transcript/modals */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #F1F5F9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+
+    /* Accordion transition */
+    .faq-content {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .faq-item[data-open="true"] .faq-content {
+      grid-template-rows: 1fr;
+    }
+    .faq-inner {
+      overflow: hidden;
+    }
+    .faq-item[data-open="true"] .faq-chevron {
+      transform: rotate(180deg);
+    }
+  </style>
+</head>
+<body class="selection:bg-indigo-600 selection:text-white">
+
+  <!-- ==================== STICKY GLASSMORPHIC NAVBAR ==================== -->
+  <header id="navbar" class="fixed top-0 inset-x-0 z-50 transition-all duration-300 border-b border-transparent">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16 md:h-20">
+        <!-- Brand Logo -->
+        <a href="#" class="flex items-center gap-2.5 group focus:outline-none">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-700 flex items-center justify-center shadow-md shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+            </svg>
+          </div>
+          <div class="flex items-baseline gap-1">
+            <span class="text-xl font-extrabold tracking-tight text-slate-900">Deep<span class="text-indigo-600">Learn</span></span>
+            <span class="hidden sm:inline-block text-[10px] font-mono-tech uppercase tracking-widest px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">Voice</span>
+          </div>
+        </a>
+
+        <!-- Desktop Navigation -->
+        <nav class="hidden lg:flex items-center gap-8 text-sm font-medium text-slate-600">
+          <a href="#practice-studio" class="hover:text-slate-900 transition-colors">Practice Studio</a>
+          <a href="#how-it-works" class="hover:text-slate-900 transition-colors">How It Works</a>
+          <a href="#features" class="hover:text-slate-900 transition-colors">Features</a>
+          <a href="#testimonials" class="hover:text-slate-900 transition-colors">Stories</a>
+          <a href="#pricing" class="hover:text-slate-900 transition-colors">Pricing</a>
+          <a href="#faq" class="hover:text-slate-900 transition-colors">FAQ</a>
+        </nav>
+
+        <!-- Right CTA Actions -->
+        <div class="hidden md:flex items-center gap-3">
+          <button onclick="openSignInModal()" class="text-sm font-semibold text-slate-700 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-100/80 transition-colors cursor-pointer">
+            Sign in
+          </button>
+          <button onclick="triggerLetsLearn(true)" class="btn-sheen inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm shadow-indigo-600/25 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer">
+            <span>Let's Learn</span>
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <!-- Mobile Menu Button -->
+        <button id="mobile-menu-btn" aria-label="Toggle Menu" class="lg:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer">
+          <svg id="menu-icon-open" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+          <svg id="menu-icon-close" class="w-6 h-6 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div id="mobile-menu" class="hidden lg:hidden bg-white/95 backdrop-blur-xl border-b border-slate-200 px-4 pt-2 pb-6 space-y-2 shadow-xl">
+      <a href="#practice-studio" onclick="closeMobileMenu()" class="block px-3 py-2.5 rounded-lg text-base font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">Practice Studio</a>
+      <a href="#how-it-works" onclick="closeMobileMenu()" class="block px-3 py-2.5 rounded-lg text-base font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">How It Works</a>
+      <a href="#features" onclick="closeMobileMenu()" class="block px-3 py-2.5 rounded-lg text-base font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">Features</a>
+      <a href="#testimonials" onclick="closeMobileMenu()" class="block px-3 py-2.5 rounded-lg text-base font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">Learner Stories</a>
+      <a href="#pricing" onclick="closeMobileMenu()" class="block px-3 py-2.5 rounded-lg text-base font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">Pricing</a>
+      <a href="#faq" onclick="closeMobileMenu()" class="block px-3 py-2.5 rounded-lg text-base font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-700">FAQ</a>
+      <div class="pt-3 border-t border-slate-200 flex flex-col gap-2">
+        <button onclick="closeMobileMenu(); triggerLetsLearn(true)" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold text-center shadow-md shadow-indigo-600/20">
+          Let's Learn Now
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ==================== HERO SECTION ==================== -->
+    <section class="relative pt-28 pb-16 md:pt-36 md:pb-20 overflow-hidden bg-dot-grid">
+      <!-- Ambient Background Glows -->
+      <div aria-hidden="true" class="pointer-events-none absolute -top-24 -left-24 w-[480px] h-[480px] rounded-full bg-indigo-200/45 blur-3xl animate-blob-slow"></div>
+      <div aria-hidden="true" class="pointer-events-none absolute top-20 -right-24 w-[420px] h-[420px] rounded-full bg-emerald-100/60 blur-3xl animate-blob-reverse"></div>
+
+      <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-3xl mx-auto text-center">
+          <!-- Pill Badge -->
+          <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/80 shadow-sm mb-7">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span class="text-xs sm:text-sm font-semibold text-slate-700">Real-Time Speech Mistake Detector • Free in Browser</span>
+          </div>
+
+          <!-- Display Headline -->
+          <h1 class="text-4xl sm:text-5xl md:text-6xl lg:text-[4.15rem] font-extrabold tracking-tight text-slate-900 leading-[1.08] mb-6">
+            Speak English aloud.<br />
+            Catch every mistake <span class="font-serif-editorial italic font-normal text-indigo-600">instantly.</span>
+          </h1>
+
+          <!-- Subtitle -->
+          <p class="text-base sm:text-lg md:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed mb-9">
+            Click <strong class="text-slate-900 font-semibold">Let's Learn</strong> to get a tailored English paragraph, tap the microphone button, and read it naturally. DeepLearn listens word-by-word and shows exactly how many mistakes you made.
+          </p>
+
+          <!-- Primary CTAs -->
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
+            <button onclick="triggerLetsLearn(true)" class="btn-sheen w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base sm:text-lg shadow-xl shadow-indigo-600/25 hover:shadow-2xl hover:shadow-indigo-600/30 hover:-translate-y-0.5 transition-all cursor-pointer">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+              <span>Let's Learn</span>
+            </button>
+
+            <button onclick="scrollToStudioAndDemo()" class="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-7 py-4 rounded-2xl bg-white/90 hover:bg-white text-slate-800 font-semibold text-base border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer">
+              <svg class="w-5 h-5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              <span>Try Interactive Demo</span>
+            </button>
+          </div>
+
+          <!-- Micro Trust Indicators -->
+          <div class="flex flex-wrap items-center justify-center gap-x-7 gap-y-2 text-xs sm:text-sm text-slate-500 font-medium">
+            <span class="inline-flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Instant word-by-word error count
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              No signup needed to start
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Native pronunciation playback
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== INTERACTIVE SPEECH PRACTICE STUDIO ==================== -->
+    <section id="practice-studio" class="relative pb-20 md:pb-28 -mt-4 scroll-mt-24">
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <!-- Elevated Studio Frame -->
+        <div class="relative rounded-3xl bg-white/95 backdrop-blur-xl border border-slate-200/90 shadow-2xl shadow-slate-900/10 overflow-hidden">
+          
+          <!-- Studio Window Top Bar -->
+          <div class="flex flex-wrap items-center justify-between gap-3 px-5 sm:px-7 py-4 bg-slate-50/90 border-b border-slate-200/80">
+            <div class="flex items-center gap-3">
+              <div class="flex items-center gap-1.5" aria-hidden="true">
+                <span class="w-3 h-3 rounded-full bg-rose-400"></span>
+                <span class="w-3 h-3 rounded-full bg-amber-400"></span>
+                <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="h-4 w-px bg-slate-200 hidden sm:block"></div>
+              <span class="text-xs sm:text-sm font-semibold text-slate-700 flex items-center gap-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-indigo-600"></span>
+                DeepLearn Speaking Studio
+              </span>
+            </div>
+
+            <!-- Step Flow Pill + Accent Toggle -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+              <label for="accent-select" class="sr-only">English Accent</label>
+              <select id="accent-select" class="text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                <option value="en-US">🇺🇸 US English (en-US)</option>
+                <option value="en-GB">🇬🇧 UK English (en-GB)</option>
+                <option value="en-AU">🇦🇺 AU English (en-AU)</option>
+              </select>
+              <span id="studio-status-pill" class="text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">
+                READY TO START
+              </span>
+            </div>
+          </div>
+
+          <!-- Studio Main Workspace -->
+          <div class="p-5 sm:p-8 md:p-10">
+
+            <!-- Difficulty / Topic Selector + "Let's Learn" Header -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+              <div class="flex flex-wrap items-center gap-2" role="tablist" aria-label="Paragraph Topic Level">
+                <button data-level="daily" onclick="selectLevel('daily')" class="level-tab px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-indigo-600 text-white shadow-sm">
+                  Daily Fluency (B1)
+                </button>
+                <button data-level="career" onclick="selectLevel('career')" class="level-tab px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200/70">
+                  Tech & Career (B2)
+                </button>
+                <button data-level="academic" onclick="selectLevel('academic')" class="level-tab px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200/70">
+                  Academic & IELTS (C1)
+                </button>
+                <button data-level="traps" onclick="selectLevel('traps')" class="level-tab px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200/70">
+                  Pronunciation Traps
+                </button>
+                <button data-level="custom" onclick="selectLevel('custom')" class="level-tab px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer bg-slate-100 text-slate-600 hover:bg-slate-200/70">
+                  Custom Text
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2.5">
+                <button id="studio-lets-learn-btn" onclick="triggerLetsLearn(false)" class="btn-sheen inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold shadow-md shadow-indigo-600/20 hover:-translate-y-0.5 transition-all cursor-pointer">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  <span id="studio-lets-learn-label">Let's Learn</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Custom Text Editor (Shown only when Custom Text tab is selected) -->
+            <div id="custom-text-panel" class="hidden mt-5 p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100">
+              <label for="custom-paragraph-input" class="block text-xs font-bold uppercase tracking-wider text-indigo-800 mb-2">Paste or type any English paragraph you want to practice</label>
+              <div class="flex flex-col sm:flex-row gap-3">
+                <textarea id="custom-paragraph-input" rows="3" placeholder="e.g., Clear pronunciation comes from steady rhythm and careful listening..." class="flex-1 rounded-xl border border-indigo-200 bg-white px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                <button onclick="applyCustomParagraph()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold self-end sm:self-stretch cursor-pointer transition-colors">
+                  Load Text
+                </button>
+              </div>
+            </div>
+
+            <!-- STAGE 1: Initial Prompt State (Before clicking "Let's Learn") -->
+            <div id="studio-welcome-state" class="py-12 sm:py-16 text-center">
+              <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-inner">
+                <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              </div>
+              <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3">Ready to test your spoken English?</h2>
+              <p class="text-slate-600 max-w-lg mx-auto text-sm sm:text-base mb-8">
+                Click the <strong class="text-indigo-700">Let's Learn</strong> button below to generate a practice paragraph. Then press the microphone button, read it aloud, and see your mistake score instantly.
+              </p>
+              <button onclick="triggerLetsLearn(false)" class="btn-sheen inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base shadow-lg shadow-indigo-600/25 hover:-translate-y-0.5 transition-all cursor-pointer">
+                <span>Let's Learn — Give Me a Paragraph</span>
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+              </button>
+            </div>
+
+            <!-- STAGE 2 & 3: Active Paragraph + Mic Controls + Mistake Analysis -->
+            <div id="studio-active-state" class="hidden pt-6 space-y-6">
+
+              <!-- Paragraph Guidance & Audio Playback Header -->
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                  <span id="paragraph-badge" class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">Daily Fluency • B1</span>
+                  <span id="paragraph-word-count" class="text-xs font-mono-tech text-slate-500">0 words</span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <button id="listen-ref-btn" onclick="speakParagraphReference()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-semibold transition-colors cursor-pointer">
+                    <svg class="w-3.5 h-3.5 text-indigo-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                    <span id="listen-ref-label">Hear Native Reading</span>
+                  </button>
+                  <button onclick="resetCurrentAttempt()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-colors cursor-pointer">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    Reset Attempt
+                  </button>
+                </div>
+              </div>
+
+              <!-- Legend for Color Coding -->
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                <p>Tip: Click any word to hear its pronunciation.</p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-100 border border-emerald-300"></span> Correct</span>
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-rose-100 border border-rose-300"></span> Wrong / Mispronounced</span>
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-100 border border-dashed border-amber-400"></span> Skipped</span>
+                </div>
+              </div>
+
+              <!-- Reading Paragraph Container -->
+              <div class="relative p-6 sm:p-8 rounded-2xl bg-[#FAF9F6] border border-slate-200/90 shadow-inner">
+                <div id="paragraph-display" class="text-xl sm:text-2xl leading-[1.85] font-medium text-slate-800 select-none" aria-live="polite">
+                  <!-- Word tokens injected here -->
+                </div>
+              </div>
+
+              <!-- Microphone Dock & Live Speech Waveform -->
+              <div class="rounded-2xl bg-slate-900 text-white p-5 sm:p-6 shadow-xl relative overflow-hidden">
+                <div aria-hidden="true" class="absolute inset-0 bg-gradient-to-r from-indigo-600/15 via-transparent to-emerald-500/10 pointer-events-none"></div>
+
+                <div class="relative flex flex-col md:flex-row items-center justify-between gap-6">
+                  <!-- Mic Action Button + Pulses -->
+                  <div class="flex items-center gap-5">
+                    <div class="relative flex items-center justify-center">
+                      <span id="mic-ring-1" class="hidden absolute inset-0 rounded-full bg-rose-500 mic-pulse-ring pointer-events-none"></span>
+                      <span id="mic-ring-2" class="hidden absolute inset-0 rounded-full bg-rose-400 mic-pulse-ring-delay pointer-events-none"></span>
+                      <button id="mic-toggle-btn" type="button" onclick="toggleMicrophone()" aria-label="Press to speak paragraph" class="relative z-10 w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-full bg-indigo-500 hover:bg-indigo-400 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-indigo-500/35 transition-all cursor-pointer focus:outline-none focus:ring-4 focus:ring-indigo-400/50">
+                        <svg id="mic-icon-idle" class="w-7 h-7 sm:w-8 sm:h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                        <svg id="mic-icon-stop" class="w-7 h-7 hidden" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+                      </button>
+                    </div>
+
+                    <div>
+                      <div id="mic-instruction-title" class="text-base sm:text-lg font-bold text-white">Tap Mic & Speak the Paragraph</div>
+                      <p id="mic-instruction-sub" class="text-xs sm:text-sm text-slate-300 mt-0.5">Speak clearly at your normal pace. Tap again when finished.</p>
+                    </div>
+                  </div>
+
+                  <!-- Dynamic Acoustic Equalizer + Quick Demo / Fallback Actions -->
+                  <div class="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto justify-end">
+                    <!-- Equalizer Bars -->
+                    <div id="waveform-bars" class="flex items-center gap-1 h-10 px-3 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80" aria-hidden="true">
+                      <!-- 16 bars injected via JS -->
+                    </div>
+
+                    <!-- Simulate Demo / Manual Fallback Buttons -->
+                    <div class="flex items-center gap-2">
+                      <button onclick="runSimulatedSpeech()" id="simulate-btn" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-indigo-200 border border-white/10 transition-colors cursor-pointer whitespace-nowrap" title="Watch a realistic demo read-aloud with mistakes detected live">
+                        ✨ Demo Read-Aloud
+                      </button>
+                      <button onclick="toggleManualInput()" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/15 text-xs font-semibold text-slate-300 border border-white/10 transition-colors cursor-pointer whitespace-nowrap" title="Type or paste spoken text manually if mic is unavailable">
+                        ⌨️ Type Test
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Live Recognized Speech Transcript Strip -->
+                <div class="relative mt-5 pt-4 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <span class="font-mono-tech uppercase tracking-wider text-indigo-400 font-semibold shrink-0 mt-0.5">Heard:</span>
+                    <p id="live-transcript-box" class="text-slate-300 italic break-words" aria-live="polite">Press the microphone button and start reading aloud...</p>
+                  </div>
+                  <div id="live-timer-badge" class="font-mono-tech text-slate-400 shrink-0 self-end sm:self-center">00:00</div>
+                </div>
+              </div>
+
+              <!-- Browser Support / Mic Alert Banner (Only shown on permission error or unsupported browser) -->
+              <div id="mic-alert-banner" class="hidden rounded-xl p-4 bg-amber-50 border border-amber-200 text-amber-900 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-start gap-2.5">
+                  <svg class="w-5 h-5 text-amber-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span id="mic-alert-text">Microphone access was paused or unavailable.</span>
+                </div>
+                <button onclick="runSimulatedSpeech()" class="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition-colors cursor-pointer self-start sm:self-center shrink-0">Run Demo Instead</button>
+              </div>
+
+              <!-- Manual Fallback Input Panel (Optional for environments without mic) -->
+              <div id="manual-input-panel" class="hidden rounded-2xl p-4 bg-slate-50 border border-slate-200 space-y-3">
+                <div class="flex items-center justify-between">
+                  <label for="manual-spoken-textarea" class="text-xs font-bold uppercase tracking-wider text-slate-700">Manual Speech Check (No Mic Mode)</label>
+                  <button onclick="toggleManualInput()" class="text-xs text-slate-500 hover:text-slate-800 cursor-pointer">Close</button>
+                </div>
+                <textarea id="manual-spoken-textarea" rows="2" placeholder="Type what you spoke (e.g., intentionally misspell or skip a word to test the mistake detector)..." class="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                <div class="flex justify-end">
+                  <button onclick="analyzeManualInput()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer transition-colors">
+                    Check Mistakes Now
+                  </button>
+                </div>
+              </div>
+
+              <!-- ==================== RESULTS & MISTAKE SCORECARD ==================== -->
+              <div id="results-panel" class="hidden rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/70 p-5 sm:p-7 space-y-6 transition-all">
+                
+                <!-- Top Summary Banner -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200/80">
+                  <div class="flex items-center gap-3.5">
+                    <div id="result-badge-icon" class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                      <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <div>
+                      <h3 id="result-headline" class="text-lg sm:text-xl font-extrabold text-slate-900">Speech Analysis Complete</h3>
+                      <p id="result-subheadline" class="text-sm text-slate-600">Here is how accurately you read the paragraph.</p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2.5">
+                    <button onclick="resetCurrentAttempt()" class="px-4 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors">
+                      Retry Same Paragraph
+                    </button>
+                    <button onclick="triggerLetsLearn(false)" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold cursor-pointer transition-colors shadow-sm">
+                      Next Paragraph →
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 4 Key Metric Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <!-- Mistakes Made (Primary Metric!) -->
+                  <div class="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Mistakes</div>
+                    <div class="flex items-baseline gap-2">
+                      <span id="metric-mistakes" class="text-3xl sm:text-4xl font-extrabold font-mono-tech text-rose-600">0</span>
+                      <span id="metric-mistakes-tag" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">detected</span>
+                    </div>
+                    <div id="metric-mistakes-breakdown" class="text-[11px] text-slate-500 mt-1.5 font-medium">0 wrong • 0 skipped • 0 extra</div>
+                  </div>
+
+                  <!-- Accuracy Score -->
+                  <div class="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Accuracy Score</div>
+                    <div class="flex items-baseline gap-2">
+                      <span id="metric-accuracy" class="text-3xl sm:text-4xl font-extrabold font-mono-tech text-emerald-600">0%</span>
+                    </div>
+                    <div class="w-full h-1.5 rounded-full bg-slate-100 mt-2.5 overflow-hidden">
+                      <div id="metric-accuracy-bar" class="h-full rounded-full bg-emerald-500 transition-all duration-700" style="width: 0%"></div>
+                    </div>
+                  </div>
+
+                  <!-- Words Matched -->
+                  <div class="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Words Correct</div>
+                    <div class="flex items-baseline gap-1.5">
+                      <span id="metric-correct-words" class="text-3xl sm:text-4xl font-extrabold font-mono-tech text-slate-900">0</span>
+                      <span id="metric-total-words" class="text-sm font-mono-tech text-slate-400">/ 0</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1.5 font-medium">Target paragraph coverage</div>
+                  </div>
+
+                  <!-- Speaking Pace (WPM) -->
+                  <div class="p-4 rounded-2xl bg-white border border-slate-200/90 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Speaking Pace</div>
+                    <div class="flex items-baseline gap-1.5">
+                      <span id="metric-wpm" class="text-3xl sm:text-4xl font-extrabold font-mono-tech text-indigo-600">0</span>
+                      <span class="text-xs font-semibold text-slate-500">WPM</span>
+                    </div>
+                    <div id="metric-wpm-note" class="text-[11px] text-slate-500 mt-1.5 font-medium">Natural target: 110–150 WPM</div>
+                  </div>
+                </div>
+
+                <!-- Detailed Mistake Cards List -->
+                <div id="mistake-details-container" class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Mistake Breakdown & Correction</h4>
+                    <span class="text-xs text-slate-500">Tap 🔊 to hear correct pronunciation</span>
+                  </div>
+                  <div id="mistake-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- Individual mistake cards rendered dynamically -->
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== SOCIAL PROOF STRIP ==================== -->
+    <section class="py-12 border-y border-slate-200/70 bg-white/60">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <p class="text-center text-xs font-bold uppercase tracking-widest text-slate-400 mb-8">
+          Trusted by ambitious English speakers preparing for interviews, IELTS & global teams
+        </p>
+
+        <!-- Clean Organization / Goal Logos -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-6 items-center justify-items-center mb-10 opacity-75">
+          <div class="flex items-center gap-2 text-slate-700 font-bold text-base sm:text-lg tracking-tight">
+            <svg class="w-5 h-5 text-indigo-600" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8.5l-2.5 1.25L12 11zm0 2.5l-5-2.5-5 2.5L12 22l10-8.5-5-2.5-5 2.5z"/></svg>
+            <span>IELTS Prep Labs</span>
+          </div>
+          <div class="flex items-center gap-2 text-slate-700 font-bold text-base sm:text-lg tracking-tight">
+            <svg class="w-5 h-5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            <span>RemoteWork Co.</span>
+          </div>
+          <div class="flex items-center gap-2 text-slate-700 font-bold text-base sm:text-lg tracking-tight">
+            <svg class="w-5 h-5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+            <span>LinguaBridge ESL</span>
+          </div>
+          <div class="flex items-center gap-2 text-slate-700 font-bold text-base sm:text-lg tracking-tight">
+            <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span>SpeakFluently Guild</span>
+          </div>
+        </div>
+
+        <!-- Key Stats -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto pt-6 border-t border-slate-200/70 text-center">
+          <div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono-tech">140,000+</div>
+            <div class="text-xs sm:text-sm text-slate-500 mt-1">Active English Learners</div>
+          </div>
+          <div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-indigo-600 font-mono-tech">2.8M+</div>
+            <div class="text-xs sm:text-sm text-slate-500 mt-1">Paragraphs Spoken & Scored</div>
+          </div>
+          <div>
+            <div class="text-2xl sm:text-3xl font-extrabold text-emerald-600 font-mono-tech">4.9 / 5.0</div>
+            <div class="text-xs sm:text-sm text-slate-500 mt-1">Average Fluency Rating</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== HOW IT WORKS (3-STEP PRODUCT SHOWCASE) ==================== -->
+    <section id="how-it-works" class="py-20 md:py-28">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-2xl mx-auto text-center mb-14 reveal-on-scroll">
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Three Simple Steps</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 mb-4">From hesitation to effortless clarity</h2>
+          <p class="text-slate-600 text-base sm:text-lg">No endless grammar quizzes. Practice speaking real English sentences and get honest, instant feedback on every word.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-7">
+          <!-- Step 1 -->
+          <div class="reveal-on-scroll relative p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all">
+            <div class="flex items-center justify-between mb-6">
+              <span class="font-mono-tech text-xs font-bold px-3 py-1 rounded-full bg-indigo-50 text-indigo-700">STEP 01</span>
+              <div class="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </div>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2.5">Click "Let's Learn"</h3>
+            <p class="text-slate-600 text-sm leading-relaxed mb-5">Receive a fresh paragraph calibrated to your level—everyday conversation, tech meetings, IELTS, or tricky phonetic pairs.</p>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-600 font-medium">
+              "Morning routines set the tone for the entire day..."
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="reveal-on-scroll relative p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all" style="transition-delay: 100ms">
+            <div class="flex items-center justify-between mb-6">
+              <span class="font-mono-tech text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700">STEP 02</span>
+              <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              </div>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2.5">Press Mic & Read Aloud</h3>
+            <p class="text-slate-600 text-sm leading-relaxed mb-5">Tap the microphone button and speak naturally. Our live speech engine listens and transcribes your voice word by word in real time.</p>
+            <div class="flex items-center gap-2 p-3 rounded-xl bg-slate-900 text-white text-xs">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+              <span class="font-mono-tech">Listening... 128 WPM</span>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="reveal-on-scroll relative p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all" style="transition-delay: 200ms">
+            <div class="flex items-center justify-between mb-6">
+              <span class="font-mono-tech text-xs font-bold px-3 py-1 rounded-full bg-rose-50 text-rose-700">STEP 03</span>
+              <div class="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-md shadow-rose-600/20">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-2.5">See Exact Mistakes & Fix</h3>
+            <p class="text-slate-600 text-sm leading-relaxed mb-5">Immediately see how many mistakes you made—skipped words, mispronounced terms, or extra fillers—and tap any word to hear it properly.</p>
+            <div class="flex items-center gap-2 p-3 rounded-xl bg-rose-50 border border-rose-100 text-xs">
+              <span class="font-bold text-rose-700">2 Mistakes</span>
+              <span class="text-slate-600">• 94% Accuracy</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== FEATURES GRID (BENTO) ==================== -->
+    <section id="features" class="py-20 md:py-28 bg-white/70 border-y border-slate-200/70">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-2xl mb-14 reveal-on-scroll">
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Built for Real Fluency</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 mb-4">Smart speech alignment, zero guesswork.</h2>
+          <p class="text-slate-600 text-base sm:text-lg">Most speech tools fail when you skip a single word. DeepLearn aligns sequences dynamically so your score stays accurate.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Feature 1 -->
+          <div class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-5">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Smart Sequence Alignment</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">If you accidentally skip or repeat a word, our dynamic alignment engine re-syncs instantly instead of marking the rest of your paragraph wrong.</p>
+          </div>
+
+          <!-- Feature 2 -->
+          <div class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-5">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Tap-to-Hear Word Coaching</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">Struggled with a word like "thoroughly" or "substantiate"? Click any highlighted word to hear crisp native pronunciation right inside the studio.</p>
+          </div>
+
+          <!-- Feature 3 -->
+          <div class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-5">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Speaking Pace Telemetry</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">Track Words Per Minute (WPM) on every read-aloud. Avoid speaking too fast when nervous or pausing too long between phrases.</p>
+          </div>
+
+          <!-- Feature 4 -->
+          <div class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center mb-5">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Custom Script Rehearsal</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">Preparing a job introduction, pitch, or classroom presentation? Switch to Custom Text, paste your own script, and test your delivery.</p>
+          </div>
+
+          <!-- Feature 5 -->
+          <div class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-5">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Homophone-Fair Scoring</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">We never penalize you unfairly when speech engines swap sound-alike words such as "their/there" or "hear/here" when pronounced accurately.</p>
+          </div>
+
+          <!-- Feature 6 -->
+          <div class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/80 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all">
+            <div class="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mb-5">
+              <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <h3 class="text-lg font-bold text-slate-900 mb-2">Judgment-Free & Private</h3>
+            <p class="text-sm text-slate-600 leading-relaxed">Practice freely without stage fright. Speech analysis happens instantaneously in your browser—make mistakes privately before your real conversation.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== BENEFITS COMPARISON ==================== -->
+    <section class="py-20 md:py-28">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center max-w-2xl mx-auto mb-14 reveal-on-scroll">
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Why Speaking Aloud Wins</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 mb-4">Reading silently doesn't train your mouth.</h2>
+          <p class="text-slate-600">Bridging passive comprehension and confident vocal articulation requires active feedback.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <!-- Old Way -->
+          <div class="reveal-on-scroll p-7 sm:p-9 rounded-3xl bg-slate-100/80 border border-slate-200/90">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-200 text-slate-600 text-xs font-bold uppercase mb-5">
+              Passive Apps & Textbooks
+            </div>
+            <h3 class="text-xl font-bold text-slate-800 mb-6">Silent reading & tapping flashcards</h3>
+            <ul class="space-y-4 text-sm text-slate-600">
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-slate-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>You recognize words visually but stumble when saying them out loud.</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-slate-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>No idea which syllables you skipped, slurred, or swapped.</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-slate-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Waiting days for expensive tutors to correct basic rhythm mistakes.</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-slate-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Social anxiety keeps you quiet in meetings and classrooms.</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- DeepLearn Way -->
+          <div class="reveal-on-scroll p-7 sm:p-9 rounded-3xl bg-white border-2 border-indigo-600 shadow-xl shadow-indigo-600/10 relative overflow-hidden">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold uppercase mb-5">
+              With DeepLearn Studio
+            </div>
+            <h3 class="text-xl font-bold text-slate-900 mb-6">Active vocal drills with instant diagnostics</h3>
+            <ul class="space-y-4 text-sm text-slate-700 font-medium">
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Trains vocal muscle memory on full, natural English paragraphs.</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Pinpoints exact mistake count, skipped words, and substitutions immediately.</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Replay native audio for any missed word and re-test within seconds.</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>Build authentic speaking confidence on your schedule, privately.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TESTIMONIALS SECTION ==================== -->
+    <section id="testimonials" class="py-20 md:py-28 bg-white/80 border-y border-slate-200/70">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-2xl mx-auto text-center mb-14 reveal-on-scroll">
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Learner Stories</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 mb-4">Real voices. Measurable progress.</h2>
+          <p class="text-slate-600">Hear from professionals, students, and lifelong learners who practice 10 minutes a day with DeepLearn.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-7">
+          <!-- Testimonial 1 -->
+          <article class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between">
+            <div>
+              <div class="flex items-center gap-1 text-amber-400 mb-4" aria-label="5 out of 5 stars">
+                ★★★★★
+              </div>
+              <p class="text-slate-700 text-sm sm:text-base leading-relaxed mb-6">
+                "I used to drop the 'th' and final '-ed' endings without realizing it. Seeing my exact mistake count go from 9 down to 0 over two weeks completely changed how clear I sound on Zoom standups."
+              </p>
+            </div>
+            <div class="flex items-center gap-3.5 pt-4 border-t border-slate-100">
+              <img src="https://images.pexels.com/photos/33799456/pexels-photo-33799456.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" alt="Mateo Silva portrait" class="w-11 h-11 rounded-full object-cover ring-2 ring-indigo-50" loading="lazy" />
+              <div>
+                <div class="text-sm font-bold text-slate-900">Mateo Silva</div>
+                <div class="text-xs text-slate-500">Backend Engineer • São Paulo</div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Testimonial 2 -->
+          <article class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between" style="transition-delay: 100ms">
+            <div>
+              <div class="flex items-center gap-1 text-amber-400 mb-4" aria-label="5 out of 5 stars">
+                ★★★★★
+              </div>
+              <p class="text-slate-700 text-sm sm:text-base leading-relaxed mb-6">
+                "I practiced IELTS Academic paragraphs every morning before work. Having the mic tell me right away when I rushed or skipped small articles helped me reach Band 8.0 in Speaking."
+              </p>
+            </div>
+            <div class="flex items-center gap-3.5 pt-4 border-t border-slate-100">
+              <img src="https://images.pexels.com/photos/5649997/pexels-photo-5649997.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" alt="Jiwon Park portrait" class="w-11 h-11 rounded-full object-cover ring-2 ring-indigo-50" loading="lazy" />
+              <div>
+                <div class="text-sm font-bold text-slate-900">Jiwon Park</div>
+                <div class="text-xs text-slate-500">Product Designer • Seoul</div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Testimonial 3 -->
+          <article class="reveal-on-scroll p-7 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between" style="transition-delay: 200ms">
+            <div>
+              <div class="flex items-center gap-1 text-amber-400 mb-4" aria-label="5 out of 5 stars">
+                ★★★★★
+              </div>
+              <p class="text-slate-700 text-sm sm:text-base leading-relaxed mb-6">
+                "The Custom Text mode is a lifesaver. I pasted my entire thesis presentation, pressed the mic, and practiced until I could read all four paragraphs with zero mistakes at a calm 130 WPM."
+              </p>
+            </div>
+            <div class="flex items-center gap-3.5 pt-4 border-t border-slate-100">
+              <img src="https://images.pexels.com/photos/6497114/pexels-photo-6497114.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" alt="Amara Okafor portrait" class="w-11 h-11 rounded-full object-cover ring-2 ring-indigo-50" loading="lazy" />
+              <div>
+                <div class="text-sm font-bold text-slate-900">Amara Okafor</div>
+                <div class="text-xs text-slate-500">Clinical Researcher • Toronto</div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== PRICING SECTION ==================== -->
+    <section id="pricing" class="py-20 md:py-28">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="max-w-2xl mx-auto text-center mb-10 reveal-on-scroll">
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Simple Pricing</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 mb-4">Start speaking free. Upgrade as you grow.</h2>
+          <p class="text-slate-600 mb-7">Practice paragraphs and detect mistakes immediately on our free plan—no credit card required.</p>
+
+          <!-- Billing Cycle Toggle -->
+          <div class="inline-flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200">
+            <button id="bill-monthly" onclick="setBilling('monthly')" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-slate-600">Monthly</button>
+            <button id="bill-annual" onclick="setBilling('annual')" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer bg-white text-slate-900 shadow-sm">
+              Annual <span class="ml-1 text-[11px] font-extrabold text-emerald-600">Save 35%</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-7 max-w-6xl mx-auto items-stretch">
+          <!-- Tier 1: Free -->
+          <div class="reveal-on-scroll p-8 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between">
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">Starter</h3>
+              <p class="text-sm text-slate-500 mt-1">Daily practice & instant error detection</p>
+              <div class="my-6 flex items-baseline gap-1">
+                <span class="text-4xl font-extrabold text-slate-900 font-mono-tech">$0</span>
+                <span class="text-sm text-slate-500">/ forever</span>
+              </div>
+              <ul class="space-y-3 text-sm text-slate-600 mb-8">
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Unlimited browser mic checks</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> 4 curated English difficulty tiers</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Word-by-word mistake breakdown</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Native pronunciation audio</li>
+              </ul>
+            </div>
+            <button onclick="triggerLetsLearn(true)" class="w-full py-3 rounded-xl border border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-800 font-bold text-sm transition-colors cursor-pointer">
+              Start Practicing Free
+            </button>
+          </div>
+
+          <!-- Tier 2: Pro (Popular) -->
+          <div class="reveal-on-scroll p-8 rounded-3xl bg-slate-900 text-white border-2 border-indigo-500 shadow-2xl shadow-indigo-900/20 relative flex flex-col justify-between">
+            <span class="absolute -top-3.5 right-6 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[11px] font-bold uppercase tracking-wider shadow-md">
+              Most Popular
+            </span>
+            <div>
+              <h3 class="text-lg font-bold text-white">Fluency Pro</h3>
+              <p class="text-sm text-slate-400 mt-1">For interview prep, IELTS & rapid fluency</p>
+              <div class="my-6 flex items-baseline gap-1">
+                <span id="pro-price" class="text-4xl font-extrabold text-white font-mono-tech">$9</span>
+                <span class="text-sm text-slate-400">/ month</span>
+              </div>
+              <ul class="space-y-3 text-sm text-slate-300 mb-8">
+                <li class="flex items-center gap-2.5"><span class="text-emerald-400 font-bold">✓</span> Everything in Starter</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-400 font-bold">✓</span> Unlimited custom script uploads</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-400 font-bold">✓</span> Long-term mistake trend analytics</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-400 font-bold">✓</span> Personal phoneme drill generator</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-400 font-bold">✓</span> Export PDF fluency progress reports</li>
+              </ul>
+            </div>
+            <button onclick="openPlanModal('Fluency Pro')" class="btn-sheen w-full py-3.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-sm shadow-lg shadow-indigo-500/30 transition-all cursor-pointer">
+              Get 7-Day Free Trial
+            </button>
+          </div>
+
+          <!-- Tier 3: Teams & Schools -->
+          <div class="reveal-on-scroll p-8 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col justify-between">
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">Teams & Academies</h3>
+              <p class="text-sm text-slate-500 mt-1">For ESL classrooms & global orgs</p>
+              <div class="my-6 flex items-baseline gap-1">
+                <span id="team-price" class="text-4xl font-extrabold text-slate-900 font-mono-tech">$19</span>
+                <span class="text-sm text-slate-500">/ seat / mo</span>
+              </div>
+              <ul class="space-y-3 text-sm text-slate-600 mb-8">
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Everything in Fluency Pro</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Assign custom reading decks</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Cohort accuracy & WPM leaderboard</li>
+                <li class="flex items-center gap-2.5"><span class="text-emerald-500 font-bold">✓</span> Dedicated onboarding support</li>
+              </ul>
+            </div>
+            <button onclick="openPlanModal('Teams & Academies')" class="w-full py-3 rounded-xl border border-slate-300 hover:border-slate-400 hover:bg-slate-50 text-slate-800 font-bold text-sm transition-colors cursor-pointer">
+              Contact Sales
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== FAQ SECTION ==================== -->
+    <section id="faq" class="py-20 md:py-28 bg-white/70 border-t border-slate-200/70">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-12 reveal-on-scroll">
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Questions Answered</span>
+          <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2">Frequently Asked Questions</h2>
+        </div>
+
+        <div class="space-y-3" id="faq-accordion">
+          <!-- FAQ 1 -->
+          <div class="faq-item rounded-2xl bg-white border border-slate-200/90 overflow-hidden" data-open="true">
+            <button onclick="toggleFaq(this)" class="w-full px-6 py-5 text-left flex items-center justify-between gap-4 cursor-pointer focus:outline-none">
+              <span class="font-bold text-slate-900 text-sm sm:text-base">How does DeepLearn detect how many mistakes I made?</span>
+              <svg class="faq-chevron w-5 h-5 text-slate-500 shrink-0 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <div class="faq-inner px-6 pb-5 text-sm text-slate-600 leading-relaxed">
+                When you press the microphone button and speak, DeepLearn captures your real-time speech transcript and runs a sequence-alignment comparison against every word in the paragraph. It counts mispronounced/substituted words, skipped words, and extra inserted filler words to give you a clear total mistake score plus word-level feedback.
+              </div>
+            </div>
+          </div>
+
+          <!-- FAQ 2 -->
+          <div class="faq-item rounded-2xl bg-white border border-slate-200/90 overflow-hidden" data-open="false">
+            <button onclick="toggleFaq(this)" class="w-full px-6 py-5 text-left flex items-center justify-between gap-4 cursor-pointer focus:outline-none">
+              <span class="font-bold text-slate-900 text-sm sm:text-base">Which browsers support the microphone speech detection?</span>
+              <svg class="faq-chevron w-5 h-5 text-slate-500 shrink-0 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <div class="faq-inner px-6 pb-5 text-sm text-slate-600 leading-relaxed">
+                Live microphone speech recognition works seamlessly on Google Chrome, Microsoft Edge, Safari (macOS & iOS), and Android Chrome. If you are on a browser without native SpeechRecognition support, you can still use our built-in Demo Read-Aloud or Type Test mode inside the studio.
+              </div>
+            </div>
+          </div>
+
+          <!-- FAQ 3 -->
+          <div class="faq-item rounded-2xl bg-white border border-slate-200/90 overflow-hidden" data-open="false">
+            <button onclick="toggleFaq(this)" class="w-full px-6 py-5 text-left flex items-center justify-between gap-4 cursor-pointer focus:outline-none">
+              <span class="font-bold text-slate-900 text-sm sm:text-base">Can I practice my own paragraphs or interview scripts?</span>
+              <svg class="faq-chevron w-5 h-5 text-slate-500 shrink-0 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <div class="faq-inner px-6 pb-5 text-sm text-slate-600 leading-relaxed">
+                Yes! In the Practice Studio toolbar, select the "Custom Text" tab, paste any English paragraph, presentation intro, or essay, click Load Text, and read it into the mic to test your accuracy immediately.
+              </div>
+            </div>
+          </div>
+
+          <!-- FAQ 4 -->
+          <div class="faq-item rounded-2xl bg-white border border-slate-200/90 overflow-hidden" data-open="false">
+            <button onclick="toggleFaq(this)" class="w-full px-6 py-5 text-left flex items-center justify-between gap-4 cursor-pointer focus:outline-none">
+              <span class="font-bold text-slate-900 text-sm sm:text-base">What if I pause briefly or speak with an accent?</span>
+              <svg class="faq-chevron w-5 h-5 text-slate-500 shrink-0 transition-transform duration-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="faq-content">
+              <div class="faq-inner px-6 pb-5 text-sm text-slate-600 leading-relaxed">
+                DeepLearn supports US, UK, and Australian English recognition models, handles homophones fairly (so "their" and "there" aren't flagged falsely), and uses sequence alignment so brief pauses or skipped words don't throw off the rest of your scoring.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== FINAL HIGH-CONTRAST CTA BANNER ==================== -->
+    <section class="py-16 md:py-24 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-5xl mx-auto rounded-[2rem] bg-slate-900 text-white p-8 sm:p-14 md:p-16 text-center relative overflow-hidden shadow-2xl">
+        <div aria-hidden="true" class="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-indigo-600/35 blur-[90px] rounded-full"></div>
+
+        <div class="relative z-10 max-w-2xl mx-auto">
+          <h2 class="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-5">
+            Ready to hear your progress after just one paragraph?
+          </h2>
+          <p class="text-slate-300 text-base sm:text-lg mb-8">
+            Click below to generate your paragraph, tap the mic, and get instant clarity on every word you speak.
+          </p>
+          <button onclick="triggerLetsLearn(true)" class="btn-sheen inline-flex items-center gap-3 px-9 py-4 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-lg shadow-xl shadow-indigo-500/30 hover:-translate-y-0.5 transition-all cursor-pointer">
+            <span>Let's Learn Now</span>
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="bg-white border-t border-slate-200/80 pt-14 pb-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-8 pb-12 border-b border-slate-200/80">
+        <div class="col-span-2">
+          <a href="#" class="flex items-center gap-2.5 mb-4">
+            <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+            </div>
+            <span class="text-lg font-extrabold text-slate-900">Deep<span class="text-indigo-600">Learn</span></span>
+          </a>
+          <p class="text-sm text-slate-500 max-w-xs leading-relaxed mb-4">
+            Real-time spoken English practice with instant word-by-word mistake tracking right in your browser.
+          </p>
+          <div class="inline-flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            Speech Studio Operational
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-900 mb-4">Studio</h4>
+          <ul class="space-y-2.5 text-sm text-slate-600">
+            <li><a href="#practice-studio" onclick="selectLevel('daily'); triggerLetsLearn(true);" class="hover:text-indigo-600">Daily Fluency</a></li>
+            <li><a href="#practice-studio" onclick="selectLevel('career'); triggerLetsLearn(true);" class="hover:text-indigo-600">Tech & Career</a></li>
+            <li><a href="#practice-studio" onclick="selectLevel('academic'); triggerLetsLearn(true);" class="hover:text-indigo-600">IELTS Practice</a></li>
+            <li><a href="#practice-studio" onclick="selectLevel('traps'); triggerLetsLearn(true);" class="hover:text-indigo-600">Pronunciation Traps</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-900 mb-4">Product</h4>
+          <ul class="space-y-2.5 text-sm text-slate-600">
+            <li><a href="#how-it-works" class="hover:text-indigo-600">How It Works</a></li>
+            <li><a href="#features" class="hover:text-indigo-600">Mistake Engine</a></li>
+            <li><a href="#pricing" class="hover:text-indigo-600">Pricing</a></li>
+            <li><a href="#faq" class="hover:text-indigo-600">FAQ</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-900 mb-4">Company</h4>
+          <ul class="space-y-2.5 text-sm text-slate-600">
+            <li><a href="#testimonials" class="hover:text-indigo-600">Learner Stories</a></li>
+            <li><button onclick="openSignInModal()" class="hover:text-indigo-600 cursor-pointer">Sign In</button></li>
+            <li><button onclick="openPlanModal('Support')" class="hover:text-indigo-600 cursor-pointer">Contact</button></li>
+            <li><span class="text-slate-400">Privacy-First Mic</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="pt-7 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        <p>© 2026 DeepLearn Speech Labs. Built for English learners worldwide.</p>
+        <p>Powered by real-time sequence alignment & Web Speech technology.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==================== LIGHTWEIGHT MODAL (SIGN IN / TRIAL) ==================== -->
+  <div id="info-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/55 backdrop-blur-sm">
+    <div class="bg-white rounded-3xl max-w-md w-full p-7 shadow-2xl border border-slate-200 relative">
+      <button onclick="closeModal()" aria-label="Close modal" class="absolute top-5 right-5 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+      </div>
+      <h3 id="modal-title" class="text-xl font-extrabold text-slate-900 mb-2">Welcome to DeepLearn</h3>
+      <p id="modal-desc" class="text-sm text-slate-600 mb-5">Enter your email to save your daily fluency streaks and mistake analytics across devices.</p>
+      <form onsubmit="handleModalSubmit(event)" class="space-y-3">
+        <input type="email" required placeholder="you@example.com" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <button type="submit" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition-colors cursor-pointer">Continue</button>
+      </form>
+      <p id="modal-feedback" class="hidden mt-3 text-xs font-semibold text-emerald-600 bg-emerald-50 p-2.5 rounded-lg text-center">
+        You're all set! Enjoy unlimited practice in the studio right away.
+      </p>
+    </div>
+  </div>
+
+  <!-- ==================== JAVASCRIPT: INTERACTIVE SPEECH STUDIO & UI ==================== -->
+  <script>
+    // ---------- 1. Curated Paragraph Bank ----------
+    const PARAGRAPH_BANK = {
+      daily: [
+        {
+          label: "Daily Fluency • B1",
+          text: "Morning routines set the tone for the entire day. When I wake up early, I like to brew a fresh cup of coffee, open the curtains for natural light, and review my top priorities before checking messages."
+        },
+        {
+          label: "Daily Fluency • B1",
+          text: "Learning a new language takes patience and steady daily practice. Even fifteen minutes of speaking aloud every afternoon can build real confidence and help your voice sound much clearer during conversations."
+        },
+        {
+          label: "Daily Fluency • B1",
+          text: "Last weekend, we decided to explore the neighborhood farmers market instead of staying indoors. The narrow street was filled with warm bread, bright flowers, and friendly vendors sharing fresh samples."
+        }
+      ],
+      career: [
+        {
+          label: "Tech & Career • B2",
+          text: "During our product review, the engineering team explained how clear communication reduces costly delays. When everyone shares concise updates early, complex projects move forward smoothly without unexpected surprises."
+        },
+        {
+          label: "Tech & Career • B2",
+          text: "Before joining a remote interview, test your microphone in a quiet room and keep your posture relaxed. Speaking at a steady pace helps listeners follow your ideas and demonstrates calm leadership."
+        },
+        {
+          label: "Tech & Career • B2",
+          text: "Great design feels effortless because every minor friction has been thoughtfully removed. Rather than adding extra menus, strong teams focus on guiding users toward their goal with total clarity."
+        }
+      ],
+      academic: [
+        {
+          label: "Academic & IELTS • C1",
+          text: "Urban planners increasingly recognize that accessible green spaces contribute substantially to mental wellness. Neighborhood parks not only moderate summer temperatures, but also encourage meaningful social interaction across generations."
+        },
+        {
+          label: "Academic & IELTS • C1",
+          text: "Although artificial intelligence accelerates data analysis, critical human judgment remains indispensable. Interpreting subtle cultural context and questioning flawed assumptions require curiosity that automated tools cannot easily replicate."
+        }
+      ],
+      traps: [
+        {
+          label: "Pronunciation Traps • TH / W / R",
+          text: "The thoughtful author thoroughly reviewed three theories about weather patterns throughout the northern coastal region, checking whether sturdy wooden roofs could withstand heavy winter winds."
+        },
+        {
+          label: "Pronunciation Traps • V / L / W",
+          text: "Vivid violet vines wrapped around the quiet village library, while very lively volunteers verified various valuable volumes before evening visitors arrived."
+        }
+      ],
+      custom: [
+        {
+          label: "Custom Practice Text",
+          text: "Clear pronunciation comes from steady rhythm, careful listening, and daily speaking practice."
+        }
+      ]
+    };
+
+    // Homophone groups so sound-alike transcriptions aren't falsely flagged
+    const HOMOPHONE_GROUPS = [
+      ["their", "there", "theyre"],
+      ["to", "too", "two"],
+      ["hear", "here"],
+      ["know", "no"],
+      ["right", "write"],
+      ["weather", "whether"],
+      ["peace", "piece"],
+      ["pair", "pear"],
+      ["wait", "weight"],
+      ["meet", "meat"],
+      ["week", "weak"],
+      ["sun", "son"],
+      ["read", "red"],
+      ["whole", "hole"],
+      ["buy", "by", "bye"],
+      ["for", "four"],
+      ["one", "won"],
+      ["hour", "our"],
+      ["new", "knew"],
+      ["sea", "see"],
+      ["its", "it's"],
+      ["through", "threw"],
+      ["break", "brake"],
+      ["flour", "flower"],
+      ["aloud", "allowed"]
+    ];
+
+    const HOMOPHONE_MAP = {};
+    HOMOPHONE_GROUPS.forEach((group, idx) => {
+      group.forEach(w => { HOMOPHONE_MAP[w.replace(/'/g, "")] = idx; });
+    });
+
+    const NUMBER_WORDS = {
+      "0":"zero","1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine",
+      "10":"ten","11":"eleven","12":"twelve","13":"thirteen","14":"fourteen","15":"fifteen","16":"sixteen","17":"seventeen","18":"eighteen","19":"nineteen","20":"twenty"
+    };
+
+    // ---------- 2. Studio State ----------
+    let currentLevel = "daily";
+    let paragraphIndexByLevel = { daily: 0, career: 0, academic: 0, traps: 0, custom: 0 };
+    let currentParagraphObj = PARAGRAPH_BANK.daily[0];
+    let targetTokens = []; // [{ display, norm, index }]
+
+    let recognition = null;
+    let isRecording = false;
+    let isSimulating = false;
+    let manualStopRequested = false;
+    let committedTranscript = "";
+    let sessionFinalText = "";        // finalized text of the CURRENT recognition run (not yet committed)
+    let latestInterimTranscript = "";
+    let recordingStartTime = null;
+    let timerInterval = null;
+    let eqInterval = null;
+    let simTimeouts = [];
+
+    // DOM Elements
+    const navbarEl = document.getElementById("navbar");
+    const welcomeStateEl = document.getElementById("studio-welcome-state");
+    const activeStateEl = document.getElementById("studio-active-state");
+    const paragraphDisplayEl = document.getElementById("paragraph-display");
+    const paragraphBadgeEl = document.getElementById("paragraph-badge");
+    const paragraphWordCountEl = document.getElementById("paragraph-word-count");
+    const studioStatusPillEl = document.getElementById("studio-status-pill");
+    const micBtnEl = document.getElementById("mic-toggle-btn");
+    const micIconIdle = document.getElementById("mic-icon-idle");
+    const micIconStop = document.getElementById("mic-icon-stop");
+    const micRing1 = document.getElementById("mic-ring-1");
+    const micRing2 = document.getElementById("mic-ring-2");
+    const micTitleEl = document.getElementById("mic-instruction-title");
+    const micSubEl = document.getElementById("mic-instruction-sub");
+    const liveTranscriptEl = document.getElementById("live-transcript-box");
+    const liveTimerEl = document.getElementById("live-timer-badge");
+    const resultsPanelEl = document.getElementById("results-panel");
+    const micAlertBanner = document.getElementById("mic-alert-banner");
+    const micAlertText = document.getElementById("mic-alert-text");
+    const waveformEl = document.getElementById("waveform-bars");
+
+    // Initialize 16 equalizer bars
+    (function initWaveform() {
+      for (let i = 0; i < 16; i++) {
+        const bar = document.createElement("span");
+        bar.className = "wave-bar w-1 h-6 rounded-full bg-slate-600";
+        bar.style.transform = `scaleY(${0.22 + (i % 3) * 0.08})`;
+        waveformEl.appendChild(bar);
+      }
+    })();
+
+    // ---------- 3. Navbar Scroll & Mobile Drawer ----------
+    window.addEventListener("scroll", () => {
+      if (window.scrollY > 18) {
+        navbarEl.classList.add("bg-white/85", "backdrop-blur-xl", "border-slate-200/80", "shadow-sm");
+        navbarEl.classList.remove("border-transparent");
+      } else {
+        navbarEl.classList.remove("bg-white/85", "backdrop-blur-xl", "border-slate-200/80", "shadow-sm");
+        navbarEl.classList.add("border-transparent");
+      }
+    });
+
+    const mobileMenuBtn = document.getElementById("mobile-menu-btn");
+    const mobileMenu = document.getElementById("mobile-menu");
+    const iconOpen = document.getElementById("menu-icon-open");
+    const iconClose = document.getElementById("menu-icon-close");
+
+    mobileMenuBtn.addEventListener("click", () => {
+      const isHidden = mobileMenu.classList.contains("hidden");
+      mobileMenu.classList.toggle("hidden", !isHidden);
+      iconOpen.classList.toggle("hidden", isHidden);
+      iconClose.classList.toggle("hidden", !isHidden);
+    });
+
+    function closeMobileMenu() {
+      mobileMenu.classList.add("hidden");
+      iconOpen.classList.remove("hidden");
+      iconClose.classList.add("hidden");
+    }
+
+    // ---------- 4. Scroll Reveal Observer ----------
+    const revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll(".reveal-on-scroll").forEach((el) => revealObserver.observe(el));
+
+    // ---------- 5. Tokenization & Normalization ----------
+    function normalizeWord(word) {
+      let clean = word
+        .toLowerCase()
+        .replace(/[’']/g, "'")
+        .replace(/[^a-z0-9']/g, "")
+        .replace(/'/g, "");
+      if (NUMBER_WORDS[clean]) clean = NUMBER_WORDS[clean];
+      if (clean === "ok") clean = "okay";
+      return clean;
+    }
+
+    function wordsMatch(normA, normB) {
+      if (!normA || !normB) return false;
+      if (normA === normB) return true;
+      if (HOMOPHONE_MAP[normA] !== undefined && HOMOPHONE_MAP[normA] === HOMOPHONE_MAP[normB]) {
+        return true;
+      }
+      return false;
+    }
+
+    function tokenizeTargetParagraph(text) {
+      // Split whitespace and hyphens cleanly so hyphenated words align accurately with speech
+      const rawParts = text.trim().replace(/-/g, " ").split(/\s+/).filter(Boolean);
+      return rawParts.map((part, idx) => ({
+        index: idx,
+        display: part,
+        norm: normalizeWord(part)
+      }));
+    }
+
+    function tokenizeSpokenTranscript(transcript) {
+      if (!transcript || !transcript.trim()) return [];
+      const expanded = transcript
+        .trim()
+        .replace(/%/g, " percent ")
+        .replace(/&/g, " and ")
+        .replace(/-/g, " ")
+        .replace(/\bcan't\b/gi, "cannot")
+        .replace(/\bwon't\b/gi, "will not");
+      return expanded
+        .split(/\s+/)
+        .map((raw) => ({ raw, norm: normalizeWord(raw) }))
+        .filter((t) => t.norm.length > 0);
+    }
+
+    // ---------- 6. Level & "Let's Learn" Flow ----------
+    function selectLevel(level) {
+      currentLevel = level;
+      document.querySelectorAll(".level-tab").forEach((btn) => {
+        if (btn.dataset.level === level) {
+          btn.classList.remove("bg-slate-100", "text-slate-600", "hover:bg-slate-200/70");
+          btn.classList.add("bg-indigo-600", "text-white", "shadow-sm");
+        } else {
+          btn.classList.add("bg-slate-100", "text-slate-600", "hover:bg-slate-200/70");
+          btn.classList.remove("bg-indigo-600", "text-white", "shadow-sm");
+        }
+      });
+
+      const customPanel = document.getElementById("custom-text-panel");
+      if (level === "custom") {
+        customPanel.classList.remove("hidden");
+      } else {
+        customPanel.classList.add("hidden");
+        // Immediately load a paragraph if already in active state
+        if (!activeStateEl.classList.contains("hidden")) {
+          loadParagraphForCurrentLevel(false);
+        }
+      }
+    }
+
+    function applyCustomParagraph() {
+      const input = document.getElementById("custom-paragraph-input").value.trim();
+      if (input.length < 8) {
+        alert("Please enter at least a short sentence to practice.");
+        return;
+      }
+      PARAGRAPH_BANK.custom[0] = {
+        label: "Custom Practice Text",
+        text: input
+      };
+      triggerLetsLearn(false);
+    }
+
+    function triggerLetsLearn(shouldScroll) {
+      if (shouldScroll) {
+        document.getElementById("practice-studio").scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      loadParagraphForCurrentLevel(true);
+    }
+
+    function scrollToStudioAndDemo() {
+      document.getElementById("practice-studio").scrollIntoView({ behavior: "smooth", block: "start" });
+      loadParagraphForCurrentLevel(true);
+      setTimeout(() => {
+        runSimulatedSpeech();
+      }, 650);
+    }
+
+    function loadParagraphForCurrentLevel(advanceIndex) {
+      stopAllAudioAndRecording();
+
+      const bank = PARAGRAPH_BANK[currentLevel];
+      if (advanceIndex && bank.length > 1) {
+        paragraphIndexByLevel[currentLevel] = (paragraphIndexByLevel[currentLevel] + 1) % bank.length;
+      }
+      currentParagraphObj = bank[paragraphIndexByLevel[currentLevel]];
+      targetTokens = tokenizeTargetParagraph(currentParagraphObj.text);
+
+      // Reveal active workspace
+      welcomeStateEl.classList.add("hidden");
+      activeStateEl.classList.remove("hidden");
+      document.getElementById("studio-lets-learn-label").textContent = "New Paragraph";
+
+      renderParagraphTokens();
+      resetAttemptUIOnly();
+    }
+
+    function renderParagraphTokens() {
+      paragraphBadgeEl.textContent = currentParagraphObj.label;
+      paragraphWordCountEl.textContent = `${targetTokens.length} words`;
+
+      paragraphDisplayEl.innerHTML = "";
+      targetTokens.forEach((token, idx) => {
+        const span = document.createElement("span");
+        span.className = "word-token word-appear";
+        span.style.animationDelay = `${Math.min(idx * 14, 380)}ms`;
+        span.dataset.index = idx;
+        span.textContent = token.display;
+        span.title = "Click to hear pronunciation";
+        span.addEventListener("click", () => speakSingleWord(token.display, span));
+        paragraphDisplayEl.appendChild(span);
+        paragraphDisplayEl.appendChild(document.createTextNode(" "));
+      });
+    }
+
+    function resetCurrentAttempt() {
+      stopAllAudioAndRecording();
+      resetAttemptUIOnly();
+    }
+
+    function resetAttemptUIOnly() {
+      committedTranscript = "";
+      sessionFinalText = "";
+      latestInterimTranscript = "";
+      resultsPanelEl.classList.add("hidden");
+      micAlertBanner.classList.add("hidden");
+      liveTranscriptEl.textContent = "Press the microphone button and start reading aloud...";
+      liveTranscriptEl.classList.add("italic", "text-slate-300");
+      liveTranscriptEl.classList.remove("text-white");
+      liveTimerEl.textContent = "00:00";
+      studioStatusPillEl.textContent = "PARAGRAPH READY";
+      studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700";
+
+      // Reset word token styles
+      document.querySelectorAll("#paragraph-display .word-token").forEach((el) => {
+        el.classList.remove("state-correct", "state-wrong", "state-missed", "state-active");
+        el.removeAttribute("data-heard");
+        el.title = "Click to hear pronunciation";
+      });
+    }
+
+    // ---------- 7. Native Text-to-Speech Coaching ----------
+    function speakSingleWord(word, el) {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const cleanWord = word.replace(/[^a-zA-Z0-9'-]/g, "");
+      const utter = new SpeechSynthesisUtterance(cleanWord);
+      utter.lang = document.getElementById("accent-select").value;
+      utter.rate = 0.88;
+      if (el) {
+        el.classList.add("state-active");
+        utter.onend = () => el.classList.remove("state-active");
+      }
+      window.speechSynthesis.speak(utter);
+    }
+
+    function speakParagraphReference() {
+      if (!("speechSynthesis" in window)) return;
+      const btnLabel = document.getElementById("listen-ref-label");
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        btnLabel.textContent = "Hear Native Reading";
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance(currentParagraphObj.text);
+      utter.lang = document.getElementById("accent-select").value;
+      utter.rate = 0.94;
+      btnLabel.textContent = "Stop Audio";
+      utter.onend = () => { btnLabel.textContent = "Hear Native Reading"; };
+      window.speechSynthesis.speak(utter);
+    }
+
+    // ---------- 8. Dynamic Programming Alignment & Mistake Engine ----------
+    /**
+     * Aligns targetTokens against spokenTokens using Needleman-Wunsch edit distance.
+     * @param {boolean} isPartialLive - If true, unread trailing target words are NOT counted as skipped mistakes yet.
+     */
+    function analyzeSpeechAlignment(spokenText, isPartialLive = false) {
+      const spokenTokens = tokenizeSpokenTranscript(spokenText);
+      const M = targetTokens.length;
+      const N = spokenTokens.length;
+
+      // Edge case: nothing spoken yet
+      if (N === 0) {
+        return {
+          wordStates: targetTokens.map((t) => ({ target: t, status: isPartialLive ? "pending" : "missed", heard: null })),
+          extraWords: [],
+          mistakesCount: isPartialLive ? 0 : M,
+          wrongCount: 0,
+          missedCount: isPartialLive ? 0 : M,
+          extraCount: 0,
+          correctCount: 0,
+          accuracy: 0
+        };
+      }
+
+      // Build DP Matrix (M+1 x N+1)
+      const dp = Array.from({ length: M + 1 }, () => new Int32Array(N + 1));
+      const back = Array.from({ length: M + 1 }, () => new Uint8Array(N + 1));
+      // back codes: 1 = match/sub (diag), 2 = skip target (up), 3 = extra spoken (left)
+
+      for (let i = 1; i <= M; i++) {
+        dp[i][0] = i;
+        back[i][0] = 2;
+      }
+      for (let j = 1; j <= N; j++) {
+        dp[0][j] = j;
+        back[0][j] = 3;
+      }
+
+      for (let i = 1; i <= M; i++) {
+        for (let j = 1; j <= N; j++) {
+          const isMatch = wordsMatch(targetTokens[i - 1].norm, spokenTokens[j - 1].norm);
+          const diagCost = dp[i - 1][j - 1] + (isMatch ? 0 : 1);
+          const upCost = dp[i - 1][j] + 1;   // target word skipped
+          const leftCost = dp[i][j - 1] + 1; // extra spoken word
+
+          if (diagCost <= upCost && diagCost <= leftCost) {
+            dp[i][j] = diagCost;
+            back[i][j] = 1;
+          } else if (upCost <= leftCost) {
+            dp[i][j] = upCost;
+            back[i][j] = 2;
+          } else {
+            dp[i][j] = leftCost;
+            back[i][j] = 3;
+          }
+        }
+      }
+
+      // For partial live tracking, find best ending row i <= M that aligns all N spoken words cleanly
+      let endI = M;
+      if (isPartialLive) {
+        let bestCost = Infinity;
+        for (let i = 0; i <= M; i++) {
+          if (dp[i][N] <= bestCost) {
+            bestCost = dp[i][N];
+            endI = i;
+          }
+        }
+      }
+
+      // Backtrack from (endI, N)
+      const wordStates = targetTokens.map((t) => ({ target: t, status: "pending", heard: null }));
+      const extraWords = [];
+
+      let i = endI;
+      let j = N;
+      while (i > 0 || j > 0) {
+        const move = back[i][j];
+        if (i > 0 && j > 0 && move === 1) {
+          const isMatch = wordsMatch(targetTokens[i - 1].norm, spokenTokens[j - 1].norm);
+          wordStates[i - 1] = {
+            target: targetTokens[i - 1],
+            status: isMatch ? "correct" : "wrong",
+            heard: spokenTokens[j - 1].raw
+          };
+          i--;
+          j--;
+        } else if (i > 0 && (j === 0 || move === 2)) {
+          wordStates[i - 1] = {
+            target: targetTokens[i - 1],
+            status: "missed",
+            heard: null
+          };
+          i--;
+        } else {
+          extraWords.unshift(spokenTokens[j - 1].raw);
+          j--;
+        }
+      }
+
+      // If final analysis and endI < M (already M above), ensure non-pending
+      let correctCount = 0;
+      let wrongCount = 0;
+      let missedCount = 0;
+
+      wordStates.forEach((ws) => {
+        if (ws.status === "correct") correctCount++;
+        else if (ws.status === "wrong") wrongCount++;
+        else if (ws.status === "missed") missedCount++;
+      });
+
+      const extraCount = extraWords.length;
+      const mistakesCount = wrongCount + missedCount + extraCount;
+      const accuracy = M > 0 ? Math.max(0, Math.round(((correctCount) / Math.max(M, M + extraCount)) * 100)) : 0;
+
+      return {
+        wordStates,
+        extraWords,
+        mistakesCount,
+        wrongCount,
+        missedCount,
+        extraCount,
+        correctCount,
+        accuracy
+      };
+    }
+
+    function applyLiveWordHighlights(wordStates) {
+      const spans = document.querySelectorAll("#paragraph-display .word-token");
+      let lastMatchedIdx = -1;
+      let processedCount = 0;
+
+      wordStates.forEach((ws, idx) => {
+        const span = spans[idx];
+        if (!span) return;
+        span.classList.remove("state-correct", "state-wrong", "state-missed", "state-active");
+        if (ws.status === "correct") {
+          span.classList.add("state-correct");
+          span.title = "Matched accurately! Click to hear pronunciation";
+          lastMatchedIdx = idx;
+          processedCount++;
+        } else if (ws.status === "wrong") {
+          span.classList.add("state-wrong");
+          span.title = `Expected "${ws.target.display}" — Heard "${ws.heard}" (Click to hear)`;
+          lastMatchedIdx = idx;
+          processedCount++;
+        } else if (ws.status === "missed") {
+          span.classList.add("state-missed");
+          span.title = `Skipped "${ws.target.display}" (Click to hear pronunciation)`;
+          lastMatchedIdx = idx;
+          processedCount++;
+        } else {
+          span.title = "Click to hear pronunciation";
+        }
+      });
+
+      // Highlight the next upcoming word softly during live recording
+      if (isRecording || isSimulating) {
+        const nextSpan = spans[lastMatchedIdx + 1];
+        if (nextSpan) {
+          nextSpan.classList.add("state-active");
+        } else if (lastMatchedIdx >= targetTokens.length - 1 && isRecording) {
+          micSubEl.textContent = "Final word reached! Tap the red stop button to see your mistake score.";
+        }
+        if (isRecording && processedCount > 0) {
+          studioStatusPillEl.textContent = `LISTENING • ${processedCount}/${targetTokens.length} WORDS`;
+        }
+      }
+    }
+
+    function renderFinalResults(transcriptText, elapsedSeconds) {
+      const report = analyzeSpeechAlignment(transcriptText, false);
+      applyLiveWordHighlights(report.wordStates);
+
+      // Remove active cursor highlight once finished
+      document.querySelectorAll("#paragraph-display .word-token").forEach((s) => s.classList.remove("state-active"));
+
+      // Show results panel
+      resultsPanelEl.classList.remove("hidden");
+
+      const mistakesEl = document.getElementById("metric-mistakes");
+      const mistakesTagEl = document.getElementById("metric-mistakes-tag");
+      const breakdownEl = document.getElementById("metric-mistakes-breakdown");
+      const accuracyEl = document.getElementById("metric-accuracy");
+      const accuracyBarEl = document.getElementById("metric-accuracy-bar");
+      const correctWordsEl = document.getElementById("metric-correct-words");
+      const totalWordsEl = document.getElementById("metric-total-words");
+      const wpmEl = document.getElementById("metric-wpm");
+      const wpmNoteEl = document.getElementById("metric-wpm-note");
+      const resultHeadlineEl = document.getElementById("result-headline");
+      const resultSubEl = document.getElementById("result-subheadline");
+      const resultBadgeIcon = document.getElementById("result-badge-icon");
+
+      mistakesEl.textContent = report.mistakesCount;
+      breakdownEl.textContent = `${report.wrongCount} misread • ${report.missedCount} skipped • ${report.extraCount} extra`;
+
+      accuracyEl.textContent = `${report.accuracy}%`;
+      accuracyBarEl.style.width = `${report.accuracy}%`;
+
+      correctWordsEl.textContent = report.correctCount;
+      totalWordsEl.textContent = `/ ${targetTokens.length}`;
+
+      const spokenWordsLen = tokenizeSpokenTranscript(transcriptText).length;
+      const mins = Math.max(elapsedSeconds / 60, 0.08);
+      const wpm = spokenWordsLen > 0 ? Math.min(260, Math.round(spokenWordsLen / mins)) : 0;
+      wpmEl.textContent = wpm;
+
+      if (wpm === 0) {
+        wpmNoteEl.textContent = "Manual check mode";
+      } else if (wpm < 95) {
+        wpmNoteEl.textContent = "Deliberate pace (great for clarity)";
+      } else if (wpm <= 155) {
+        wpmNoteEl.textContent = "Optimal native cadence (110–155 WPM)";
+      } else {
+        wpmNoteEl.textContent = "Slightly fast — try slowing down";
+      }
+
+      // Dynamic feedback messaging
+      if (report.mistakesCount === 0) {
+        mistakesEl.className = "text-3xl sm:text-4xl font-extrabold font-mono-tech text-emerald-600";
+        mistakesTagEl.textContent = "perfect!";
+        mistakesTagEl.className = "text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700";
+        resultHeadlineEl.textContent = "Flawless Reading — 0 Mistakes!";
+        resultSubEl.textContent = "Every single word matched cleanly. Try a harder tier or your own script!";
+        resultBadgeIcon.className = "w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100";
+        studioStatusPillEl.textContent = "0 MISTAKES • 100%";
+        studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800";
+      } else if (report.mistakesCount <= 3) {
+        mistakesEl.className = "text-3xl sm:text-4xl font-extrabold font-mono-tech text-amber-600";
+        mistakesTagEl.textContent = report.mistakesCount === 1 ? "mistake" : "mistakes";
+        mistakesTagEl.className = "text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700";
+        resultHeadlineEl.textContent = `Great Effort — ${report.mistakesCount} Minor ${report.mistakesCount === 1 ? "Mistake" : "Mistakes"}`;
+        resultSubEl.textContent = "Review the highlighted words below and tap 🔊 to master them.";
+        resultBadgeIcon.className = "w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100";
+        studioStatusPillEl.textContent = `${report.mistakesCount} MISTAKES FOUND`;
+        studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800";
+      } else {
+        mistakesEl.className = "text-3xl sm:text-4xl font-extrabold font-mono-tech text-rose-600";
+        mistakesTagEl.textContent = "mistakes";
+        mistakesTagEl.className = "text-xs font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700";
+        resultHeadlineEl.textContent = `${report.mistakesCount} Mistakes Detected`;
+        resultSubEl.textContent = "Listen to the native audio once, then retry at a relaxed pace.";
+        resultBadgeIcon.className = "w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100";
+        studioStatusPillEl.textContent = `${report.mistakesCount} MISTAKES FOUND`;
+        studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800";
+      }
+
+      // Render detailed Mistake Breakdown Cards
+      const mistakeListEl = document.getElementById("mistake-list");
+      const detailsContainer = document.getElementById("mistake-details-container");
+      mistakeListEl.innerHTML = "";
+
+      const mistakeEntries = [];
+      report.wordStates.forEach((ws) => {
+        if (ws.status === "wrong") {
+          mistakeEntries.push({
+            type: "Misread / Substituted",
+            expected: ws.target.display,
+            heard: ws.heard,
+            color: "rose"
+          });
+        } else if (ws.status === "missed") {
+          mistakeEntries.push({
+            type: "Skipped Word",
+            expected: ws.target.display,
+            heard: null,
+            color: "amber"
+          });
+        }
+      });
+
+      if (report.extraWords.length > 0) {
+        mistakeEntries.push({
+          type: `Extra Spoken Words (${report.extraWords.length})`,
+          expected: null,
+          heard: report.extraWords.join(", "),
+          color: "slate"
+        });
+      }
+
+      if (mistakeEntries.length === 0) {
+        detailsContainer.classList.add("hidden");
+      } else {
+        detailsContainer.classList.remove("hidden");
+        mistakeEntries.forEach((item) => {
+          const card = document.createElement("div");
+          card.className = "p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-3 shadow-xs";
+
+          const left = document.createElement("div");
+          left.className = "min-w-0";
+
+          const badge = document.createElement("span");
+          if (item.color === "rose") {
+            badge.className = "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-50 text-rose-700";
+          } else if (item.color === "amber") {
+            badge.className = "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-50 text-amber-700";
+          } else {
+            badge.className = "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-700";
+          }
+          badge.textContent = item.type;
+
+          const body = document.createElement("div");
+          body.className = "mt-1.5 text-sm text-slate-800 font-medium";
+          if (item.expected && item.heard) {
+            body.innerHTML = `Expected <strong class="text-slate-900">"${escapeHtml(item.expected)}"</strong> → Heard <span class="text-rose-600 line-through">"${escapeHtml(item.heard)}"</span>`;
+          } else if (item.expected) {
+            body.innerHTML = `Missed word: <strong class="text-amber-700">"${escapeHtml(item.expected)}"</strong>`;
+          } else {
+            body.innerHTML = `Added extra: <span class="text-slate-600">"${escapeHtml(item.heard)}"</span>`;
+          }
+
+          left.appendChild(badge);
+          left.appendChild(body);
+          card.appendChild(left);
+
+          if (item.expected) {
+            const audioBtn = document.createElement("button");
+            audioBtn.className = "shrink-0 w-9 h-9 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 flex items-center justify-center transition-colors cursor-pointer";
+            audioBtn.title = `Hear "${item.expected}"`;
+            audioBtn.innerHTML = "🔊";
+            audioBtn.addEventListener("click", () => speakSingleWord(item.expected, null));
+            card.appendChild(audioBtn);
+          }
+
+          mistakeListEl.appendChild(card);
+        });
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // ---------- 9. Real Web Speech API Recording Control (FIXED) ----------
+    function joinText() {
+      return Array.prototype.slice.call(arguments)
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function showMicAlert(message) {
+      micAlertText.textContent = message;
+      micAlertBanner.classList.remove("hidden");
+    }
+
+    /**
+     * Fully detach and abort the current recognition instance. Handlers are nulled FIRST so a late
+     * "end"/"error" event from an old instance can never touch the state of a newer session
+     * (this was the cause of the mic randomly stopping/restarting itself).
+     */
+    function discardRecognition() {
+      if (!recognition) return;
+      const old = recognition;
+      recognition = null;
+      old.onstart = old.onaudiostart = old.onresult = old.onerror = old.onend = null;
+      try { old.abort(); } catch (e) { /* already stopped */ }
+    }
+
+    function toggleMicrophone() {
+      if (isSimulating) {
+        stopSimulatedSpeech();
+        stopTimerAndEqualizer();
+      }
+      if (isRecording) {
+        stopMicrophone();
+      } else {
+        startMicrophone();
+      }
+    }
+
+    function startMicrophone() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        showMicAlert("Live speech recognition isn't supported in this browser (it works in Chrome, Edge, and Safari — not Firefox). Use Demo Read-Aloud or Type Test instead!");
+        return;
+      }
+
+      if (!window.isSecureContext) {
+        showMicAlert("Browsers only allow the microphone on https:// pages or on localhost. Open this page from a local server (e.g. http://localhost) or an https:// host, or use Demo Read-Aloud.");
+        return;
+      }
+
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      discardRecognition();
+      resetAttemptUIOnly();
+
+      manualStopRequested = false;
+      committedTranscript = "";
+      sessionFinalText = "";
+      latestInterimTranscript = "";
+      recordingStartTime = Date.now();
+
+      // Only switch the UI to "recording" if the engine really started.
+      if (!setupAndStartRecognition(SpeechRecognition)) return;
+
+      setRecordingVisuals(true);
+      micSubEl.textContent = "If your browser asks, click Allow to use the microphone…";
+      startTimerAndEqualizer();
+    }
+
+    /** Creates + starts a recognition instance. Returns true on success, false on a synchronous failure. */
+    function setupAndStartRecognition(SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+      rec.lang = document.getElementById("accent-select").value;
+
+      let lastStartTs = Date.now();
+      let rapidRestarts = 0;
+
+      rec.onstart = () => {
+        if (rec !== recognition) return;
+        micSubEl.textContent = "Mic is live — start reading the paragraph aloud.";
+      };
+
+      rec.onaudiostart = () => {
+        if (rec !== recognition) return;
+        micSubEl.textContent = "Mic is live — start reading the paragraph aloud.";
+      };
+
+      rec.onresult = (event) => {
+        if (rec !== recognition) return;
+        let interim = "";
+        let finalized = "";
+        for (let i = 0; i < event.results.length; i++) {
+          const chunk = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalized += chunk + " ";
+          } else {
+            interim += chunk + " ";
+          }
+        }
+        sessionFinalText = finalized;
+        latestInterimTranscript = interim;
+
+        const fullLiveText = joinText(committedTranscript, sessionFinalText, interim);
+        if (fullLiveText) {
+          liveTranscriptEl.textContent = fullLiveText;
+          liveTranscriptEl.classList.remove("italic", "text-slate-300");
+          liveTranscriptEl.classList.add("text-white");
+
+          // Live word alignment preview
+          const partialReport = analyzeSpeechAlignment(fullLiveText, true);
+          applyLiveWordHighlights(partialReport.wordStates);
+          pulseEqualizerBoost();
+        }
+      };
+
+      rec.onerror = (event) => {
+        if (rec !== recognition) return;
+        const inFrame = (function () { try { return window.self !== window.top; } catch (e) { return true; } })();
+
+        switch (event.error) {
+          case "not-allowed":
+          case "service-not-allowed":
+            failRecording(
+              "Microphone permission is blocked. Click the lock/site-settings icon in the address bar, set Microphone to Allow, then reload and try again." +
+              (inFrame ? " This page is running inside an embedded frame, which often blocks the mic — open it in its own browser tab." : "") +
+              (location.protocol === "file:" ? " Tip: pages opened straight from disk (file://) are often blocked — serve it from http://localhost instead." : "") +
+              " You can still use Demo Read-Aloud."
+            );
+            break;
+          case "audio-capture":
+            failRecording("No working microphone was found. Plug one in or choose the right input device in your system sound settings, then try again.");
+            break;
+          case "network":
+            failRecording("The browser's speech service couldn't be reached. Chrome and Edge send your audio to an online speech service, so you need an internet connection that can reach it (VPNs, firewalls, and some browsers like Brave can block it). Try again, or use Demo Read-Aloud / Type Test.");
+            break;
+          case "language-not-supported":
+            failRecording("This browser doesn't support the selected accent. Pick another accent (e.g. en-US) and try again.");
+            break;
+          case "no-speech":
+            micSubEl.textContent = "No voice heard yet — try speaking slightly closer to your mic.";
+            break;
+          case "aborted":
+            break;
+          default:
+            failRecording(`The speech engine reported "${event.error}". Please try again, or use Demo Read-Aloud.`);
+        }
+      };
+
+      rec.onend = () => {
+        if (rec !== recognition) return;
+
+        // Bank whatever this run produced (final text + any un-finalized interim text)
+        committedTranscript = joinText(committedTranscript, sessionFinalText, latestInterimTranscript);
+        sessionFinalText = "";
+        latestInterimTranscript = "";
+
+        if (!manualStopRequested && isRecording) {
+          // Browsers end continuous sessions on their own after silence — restart seamlessly,
+          // but bail out if the engine keeps dying instantly (prevents an infinite restart loop).
+          const now = Date.now();
+          rapidRestarts = (now - lastStartTs < 700) ? rapidRestarts + 1 : 0;
+          if (rapidRestarts >= 4) {
+            failRecording("The speech engine keeps stopping right after it starts. Check that your microphone works and isn't in use by another app, then try again.");
+            return;
+          }
+          lastStartTs = now;
+          try {
+            rec.start();
+          } catch (e) {
+            finishRecordingSession();
+          }
+        } else if (isRecording) {
+          finishRecordingSession();
+        }
+      };
+
+      recognition = rec;
+      try {
+        rec.start();
+        return true;
+      } catch (err) {
+        recognition = null;
+        showMicAlert("Could not start the microphone. Check browser permissions, or run Demo Read-Aloud.");
+        return false;
+      }
+    }
+
+    function stopMicrophone() {
+      if (!isRecording) return;
+      manualStopRequested = true;
+      micSubEl.textContent = "Finishing up…";
+
+      const rec = recognition;
+      if (!rec) {
+        finishRecordingSession();
+        return;
+      }
+      try {
+        rec.stop();
+      } catch (e) {
+        finishRecordingSession();
+        return;
+      }
+      // Safety net: if the browser never fires "end", still show results.
+      setTimeout(() => {
+        if (isRecording && recognition === rec) finishRecordingSession();
+      }, 1800);
+    }
+
+    /** Fatal mic problem: stop cleanly, tell the user why, keep any words already heard. */
+    function failRecording(message) {
+      manualStopRequested = true;
+      showMicAlert(message);
+      finishRecordingSession(true);
+    }
+
+    function finishRecordingSession(isError = false) {
+      const finalSpokenText = joinText(committedTranscript, sessionFinalText, latestInterimTranscript);
+      const elapsedSec = recordingStartTime ? (Date.now() - recordingStartTime) / 1000 : 1;
+
+      discardRecognition();
+      isRecording = false;
+      setRecordingVisuals(false);
+      stopTimerAndEqualizer();
+      sessionFinalText = "";
+      latestInterimTranscript = "";
+
+      if (!finalSpokenText) {
+        if (isError) {
+          liveTranscriptEl.textContent = "Microphone problem — see the message below.";
+          studioStatusPillEl.textContent = "MIC ERROR";
+          studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800";
+        } else {
+          liveTranscriptEl.textContent = "No words were detected. Tap the mic and speak clearly, or try Demo Read-Aloud.";
+          studioStatusPillEl.textContent = "NO SPEECH DETECTED";
+          studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800";
+        }
+        return;
+      }
+
+      liveTranscriptEl.textContent = finalSpokenText;
+      renderFinalResults(finalSpokenText, elapsedSec);
+    }
+
+    function stopAllAudioAndRecording() {
+      manualStopRequested = true;
+      discardRecognition();
+      isRecording = false;
+      sessionFinalText = "";
+      latestInterimTranscript = "";
+      stopSimulatedSpeech();
+      stopTimerAndEqualizer();
+      setRecordingVisuals(false);
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const label = document.getElementById("listen-ref-label");
+        if (label) label.textContent = "Hear Native Reading";
+      }
+    }
+
+    // ---------- 10. Visual Indicators: Mic Ring, Timer, Equalizer ----------
+    function setRecordingVisuals(active) {
+      isRecording = active;
+      if (active) {
+        micBtnEl.classList.remove("bg-indigo-500", "hover:bg-indigo-400");
+        micBtnEl.classList.add("bg-rose-500", "hover:bg-rose-400");
+        micIconIdle.classList.add("hidden");
+        micIconStop.classList.remove("hidden");
+        micRing1.classList.remove("hidden");
+        micRing2.classList.remove("hidden");
+        micTitleEl.textContent = "Listening... Read Paragraph Aloud";
+        micSubEl.textContent = "Tap the red stop button when you finish reading.";
+        studioStatusPillEl.textContent = "LISTENING LIVE";
+        studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 animate-pulse";
+      } else {
+        micBtnEl.classList.add("bg-indigo-500", "hover:bg-indigo-400");
+        micBtnEl.classList.remove("bg-rose-500", "hover:bg-rose-400");
+        micIconIdle.classList.remove("hidden");
+        micIconStop.classList.add("hidden");
+        micRing1.classList.add("hidden");
+        micRing2.classList.add("hidden");
+        micTitleEl.textContent = "Tap Mic & Speak the Paragraph";
+        micSubEl.textContent = "Speak clearly at your normal pace. Tap again when finished.";
+      }
+    }
+
+    function startTimerAndEqualizer() {
+      stopTimerAndEqualizer();
+      const startTs = Date.now();
+      timerInterval = setInterval(() => {
+        const diff = Math.floor((Date.now() - startTs) / 1000);
+        const mins = String(Math.floor(diff / 60)).padStart(2, "0");
+        const secs = String(diff % 60).padStart(2, "0");
+        liveTimerEl.textContent = `${mins}:${secs}`;
+      }, 250);
+
+      eqInterval = setInterval(() => {
+        const bars = waveformEl.querySelectorAll(".wave-bar");
+        bars.forEach((bar) => {
+          const level = 0.25 + Math.random() * 0.65;
+          bar.style.transform = `scaleY(${level})`;
+          bar.classList.remove("bg-slate-600");
+          bar.classList.add("bg-indigo-400");
+        });
+      }, 130);
+    }
+
+    function pulseEqualizerBoost() {
+      const bars = waveformEl.querySelectorAll(".wave-bar");
+      bars.forEach((bar) => {
+        const level = 0.55 + Math.random() * 0.75;
+        bar.style.transform = `scaleY(${level})`;
+        bar.classList.remove("bg-slate-600", "bg-indigo-400");
+        bar.classList.add("bg-emerald-400");
+      });
+    }
+
+    function stopTimerAndEqualizer() {
+      if (timerInterval) clearInterval(timerInterval);
+      if (eqInterval) clearInterval(eqInterval);
+      timerInterval = null;
+      eqInterval = null;
+      const bars = waveformEl.querySelectorAll(".wave-bar");
+      bars.forEach((bar, i) => {
+        bar.style.transform = `scaleY(${0.22 + (i % 3) * 0.08})`;
+        bar.classList.remove("bg-indigo-400", "bg-emerald-400");
+        bar.classList.add("bg-slate-600");
+      });
+    }
+
+    // ---------- 11. Interactive Demo Read-Aloud & Manual Fallback ----------
+    function runSimulatedSpeech() {
+      stopAllAudioAndRecording();
+      resetAttemptUIOnly();
+      if (welcomeStateEl && !welcomeStateEl.classList.contains("hidden")) {
+        loadParagraphForCurrentLevel(false);
+      }
+
+      isSimulating = true;
+      studioStatusPillEl.textContent = "DEMO SPEAKING...";
+      studioStatusPillEl.className = "text-xs font-mono-tech font-semibold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700";
+      micTitleEl.textContent = "Simulated Demo Reading...";
+      micSubEl.textContent = "Simulating a learner reading with 2 natural mistakes.";
+      startTimerAndEqualizer();
+
+      // Build realistic spoken words with 1 substitution and 1 skipped word
+      const simulatedWords = [];
+      const skipIdx = Math.min(4, targetTokens.length - 2);
+      const swapIdx = Math.min(Math.floor(targetTokens.length * 0.65), targetTokens.length - 1);
+
+      targetTokens.forEach((tok, idx) => {
+        if (idx === skipIdx && targetTokens.length > 6) {
+          // skip one word
+          return;
+        }
+        if (idx === swapIdx && targetTokens.length > 6) {
+          simulatedWords.push("almost"); // intentional mismatch
+        } else {
+          simulatedWords.push(tok.display.replace(/[^a-zA-Z0-9']/g, ""));
+        }
+      });
+
+      const simStart = Date.now();
+      let built = "";
+      liveTranscriptEl.classList.remove("italic", "text-slate-300");
+      liveTranscriptEl.classList.add("text-white");
+
+      simulatedWords.forEach((word, step) => {
+        const t = setTimeout(() => {
+          if (!isSimulating) return;
+          built = (built + " " + word).trim();
+          liveTranscriptEl.textContent = built;
+          const partial = analyzeSpeechAlignment(built, true);
+          applyLiveWordHighlights(partial.wordStates);
+          pulseEqualizerBoost();
+
+          if (step === simulatedWords.length - 1) {
+            setTimeout(() => {
+              if (!isSimulating) return;
+              isSimulating = false;
+              stopTimerAndEqualizer();
+              micTitleEl.textContent = "Tap Mic & Speak the Paragraph";
+              micSubEl.textContent = "Speak clearly at your normal pace. Tap again when finished.";
+              const elapsed = Math.max((Date.now() - simStart) / 1000, 6);
+              renderFinalResults(built, elapsed);
+            }, 350);
+          }
+        }, step * 190);
+        simTimeouts.push(t);
+      });
+    }
+
+    function stopSimulatedSpeech() {
+      isSimulating = false;
+      simTimeouts.forEach((t) => clearTimeout(t));
+      simTimeouts = [];
+    }
+
+    function toggleManualInput() {
+      const panel = document.getElementById("manual-input-panel");
+      panel.classList.toggle("hidden");
+      if (!panel.classList.contains("hidden")) {
+        document.getElementById("manual-spoken-textarea").focus();
+      }
+    }
+
+    function analyzeManualInput() {
+      const txt = document.getElementById("manual-spoken-textarea").value.trim();
+      if (!txt) return;
+      stopAllAudioAndRecording();
+      liveTranscriptEl.textContent = txt;
+      liveTranscriptEl.classList.remove("italic", "text-slate-300");
+      liveTranscriptEl.classList.add("text-white");
+      renderFinalResults(txt, Math.max(tokenizeSpokenTranscript(txt).length / 2.1, 4));
+    }
+
+    // ---------- 12. Pricing Toggle, FAQ & Modal ----------
+    function setBilling(mode) {
+      const btnMonthly = document.getElementById("bill-monthly");
+      const btnAnnual = document.getElementById("bill-annual");
+      const proPrice = document.getElementById("pro-price");
+      const teamPrice = document.getElementById("team-price");
+
+      if (mode === "monthly") {
+        btnMonthly.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer bg-white text-slate-900 shadow-sm";
+        btnAnnual.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-slate-600";
+        proPrice.textContent = "$14";
+        teamPrice.textContent = "$29";
+      } else {
+        btnAnnual.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer bg-white text-slate-900 shadow-sm";
+        btnMonthly.className = "px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer text-slate-600";
+        proPrice.textContent = "$9";
+        teamPrice.textContent = "$19";
+      }
+    }
+
+    function toggleFaq(btn) {
+      const item = btn.closest(".faq-item");
+      const isOpen = item.getAttribute("data-open") === "true";
+      item.setAttribute("data-open", isOpen ? "false" : "true");
+    }
+
+    function openSignInModal() {
+      document.getElementById("modal-title").textContent = "Sign in to DeepLearn";
+      document.getElementById("modal-desc").textContent = "Save your paragraph history, accuracy scores, and custom scripts.";
+      document.getElementById("modal-feedback").classList.add("hidden");
+      document.getElementById("info-modal").classList.remove("hidden");
+    }
+
+    function openPlanModal(planName) {
+      document.getElementById("modal-title").textContent = `Get Started with ${planName}`;
+      document.getElementById("modal-desc").textContent = "Enter your email and we will send your instant access invite.";
+      document.getElementById("modal-feedback").classList.add("hidden");
+      document.getElementById("info-modal").classList.remove("hidden");
+    }
+
+    function closeModal() {
+      document.getElementById("info-modal").classList.add("hidden");
+    }
+
+    function handleModalSubmit(e) {
+      e.preventDefault();
+      document.getElementById("modal-feedback").classList.remove("hidden");
+    }
+
+    // Close modal on Escape or backdrop click
+    document.getElementById("info-modal").addEventListener("click", (e) => {
+      if (e.target.id === "info-modal") closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeModal();
+    });
+  </script>
+</body>
+</html>
